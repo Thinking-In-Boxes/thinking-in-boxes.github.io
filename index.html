@@ -1159,7 +1159,8 @@ a.author:hover { color: var(--accent); border-bottom-color: color-mix(in srgb, v
   position: fixed; inset: 0;
   background: rgba(20, 18, 16, 0.78);
   display: none;
-  align-items: center; justify-content: center;
+  align-items: safe center; justify-content: center;   /* never clip the top of a tall card */
+  overflow-y: auto;                                     /* and let the overlay scroll to reach it */
   z-index: 1000;
   padding: 2rem;
   backdrop-filter: blur(8px);
@@ -1179,6 +1180,7 @@ a.author:hover { color: var(--accent); border-bottom-color: color-mix(in srgb, v
   border-bottom: 1px solid var(--border);
   display: flex; align-items: center; justify-content: space-between;
   background: var(--bg2);
+  flex: 0 0 auto;
 }
 .lightbox-title { font-weight: 600; font-size: 0.92rem; }
 .lightbox-close {
@@ -1191,14 +1193,18 @@ a.author:hover { color: var(--accent); border-bottom-color: color-mix(in srgb, v
 }
 .lightbox-close:hover { color: var(--accent); border-color: var(--accent); }
 
-/* Stage = horizontal strip of 4 slots that appear one-after-another */
+/* Stage = horizontal strip of 4 slots that appear one-after-another.
+   It flexes and scrolls so the header + caption stay visible and nothing is
+   ever clipped when the pop-out is taller than the screen (short/landscape). */
 .lightbox-stage {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 0.9rem;
   padding: 1.25rem;
   background: #F6F3EE;
-  min-height: 320px;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
   justify-content: center;
 }
 /* Source-only mode: centre the 2 slots and cap their width so they don't stretch */
@@ -1209,6 +1215,19 @@ a.author:hover { color: var(--accent); border-bottom-color: color-mix(in srgb, v
 [data-theme="dark"] .lightbox-stage { background: #181513; }
 @media (max-width: 760px) {
   .lightbox-stage { grid-template-columns: repeat(2, 1fr); }
+}
+/* Short / landscape screens: single row of 4 so the whole pop-out fits the
+   viewport height instead of clipping the caption. */
+@media (max-height: 560px) {
+  .lightbox { padding: 0.6rem; }
+  .lightbox-card { max-height: 96vh; }
+  .lightbox-stage { grid-template-columns: repeat(4, 1fr) !important; gap: 0.5rem; padding: 0.6rem; }
+  /* cap the media so a single row of 4 fits the short viewport height */
+  .lightbox-slot-img { max-height: 58vh; }
+  .lightbox-slot-img img, .lightbox-slot-img canvas, .lightbox-slot img { max-height: 58vh; width: auto; max-width: 100%; }
+  .lightbox-slot-label { font-size: 0.66rem; }
+  .lightbox-head { padding: 0.5rem 0.9rem; }
+  .lightbox-caption { padding: 0.4rem 0.9rem; }
 }
 
 .lightbox-slot {
@@ -1285,6 +1304,7 @@ a.author:hover { color: var(--accent); border-bottom-color: color-mix(in srgb, v
   display: flex; align-items: center; justify-content: space-between;
   gap: 1rem;
   flex-wrap: wrap;       /* lets the replay button drop to its own line on narrow screens */
+  flex: 0 0 auto;
 }
 .lb-caption-text {
   font-size: 0.82rem; color: var(--text);
@@ -1583,7 +1603,8 @@ a.author:hover { color: var(--accent); border-bottom-color: color-mix(in srgb, v
   height: auto;
 }
 
-/* Preserved-layout (single figure) view for B/C/Baseline */
+/* Preserved-layout (single figure) view for Baselines — a static picture that
+   enlarges to the full image on click (no box-transition playback). */
 .qg-figure {
   margin-top: 0.25rem;
   background: var(--surface);
@@ -1912,6 +1933,7 @@ footer p { font-size: 1rem; }
 .to-top.show { opacity: 1; visibility: visible; transform: translateY(0); }
 .to-top:hover { color: var(--accent); border-color: var(--accent); }
 .to-top svg { display: block; }
+@media (max-width: 600px) { .to-top { right: 1rem; bottom: 1rem; width: 40px; height: 40px; } }
 
 /* ════════════════════════════════════════════════════════════════════════
    RESPONSIVE — phones, tablets, small laptops
@@ -1950,15 +1972,15 @@ footer p { font-size: 1rem; }
     position: static; transform: none;   
     display: flex !important;
     justify-content: space-between;
-    gap: 0;
+    gap: 0.2rem;
     font-size: 0.72rem;
     letter-spacing: 0;
     text-transform: none;
   }
   .nav-links a {
-    padding: 0.2rem 0.3rem;
+    padding: 0.2rem 0.15rem;
     white-space: nowrap;
-    flex: 1;
+    flex: 0 1 auto;
     min-width: 0;
     text-align: center;
     text-transform: none;
@@ -1976,47 +1998,38 @@ footer p { font-size: 1rem; }
   .two-col { grid-template-columns: 1fr; gap: 1rem; }
   .train-details { grid-template-columns: 1fr; gap: 1.25rem; }
 
-  /* ── Teaser figure — stacked layout that PRESERVES PAIRING ──────────
-     The desktop "Source col → Edits 4×2 grid" doesn't fit when we squeeze
-     to a phone.  Instead we stack:
-         Source row  (A | B side-by-side)
-              ↓
-         Edits grid  (C D E F across the top  /  G H I J below) — 4×2
-     so each Source/Edit boxes-image pair sits in the same column.       */
-  /* Flat teaser grid: A+B side-by-side | rotated arrow | C-F boxes row | G-J images row */
+  /* ── Teaser figure — phone layout: 2 columns (Boxes | Image), one
+       operation per row, so every tile is big and legible.
+         row 1:  Source Boxes  | Source Image   (A | B)
+         row 2:  Translate     | its result     (C | G)
+         row 3:  Rotate        | its result     (D | H)
+         row 4:  Interchange   | its result     (E | I)
+         row 5:  Rotate Camera | its result     (F | J)                  */
   .teaser-figure-body {
     display: grid !important;
-    grid-template-columns: 1fr 1fr 22px 1fr 1fr 1fr 1fr;
-    grid-template-rows: auto auto auto;
-    column-gap: 0.3rem;
-    row-gap: 0.35rem;
-    padding: 0.6rem;
+    grid-template-columns: 1fr 1fr;
+    grid-auto-rows: 1fr;
+    column-gap: 0.5rem;
+    row-gap: 0.6rem;
+    padding: 0.85rem;
     background: var(--bg2);
   }
+  .teaser-h-arrow { display: none !important; }
   .teaser-tile[data-pos="A"] { grid-column: 1; grid-row: 1; }
   .teaser-tile[data-pos="B"] { grid-column: 2; grid-row: 1; }
-  .teaser-h-arrow { grid-column: 3; grid-row: 1 / 3; align-self: center; width: 18px; height: 18px; margin: 0; border-width: 1.5px; }
-  .teaser-h-arrow svg { width: 9px; height: 9px; }
-  .teaser-tile[data-pos="C"] { grid-column: 4; grid-row: 1; }
-  .teaser-tile[data-pos="D"] { grid-column: 5; grid-row: 1; }
-  .teaser-tile[data-pos="E"] { grid-column: 6; grid-row: 1; }
-  .teaser-tile[data-pos="F"] { grid-column: 7; grid-row: 1; }
-  .teaser-tile[data-pos="G"] { grid-column: 4; grid-row: 2; }
-  .teaser-tile[data-pos="H"] { grid-column: 5; grid-row: 2; }
-  .teaser-tile[data-pos="I"] { grid-column: 6; grid-row: 2; }
-  .teaser-tile[data-pos="J"] { grid-column: 7; grid-row: 2; }
-  .teaser-col-lbl[style*="grid-column:1"] { grid-column: 1/3 !important; grid-row: 3 !important; }
-  .teaser-col-lbl[style*="grid-column:3"] { grid-column: 4/8 !important; grid-row: 3 !important; }
-  .teaser-col-lbl {
-    font-size: 0.62rem;
-    text-align: center;
-    margin: 0.1rem 0 0;
-    padding: 0; border: none;
-  }
-  .teaser-row-tag, .teaser-col-tag { font-size: 0.48rem; padding: 0.08rem 0.25rem; }
-  .teaser-tile { border-radius: 5px; }
-  .teaser-tile.has-arrow::after { display: none; }
-  .teaser-tile:hover { transform: scale(1.15); }
+  .teaser-tile[data-pos="C"] { grid-column: 1; grid-row: 2; }
+  .teaser-tile[data-pos="G"] { grid-column: 2; grid-row: 2; }
+  .teaser-tile[data-pos="D"] { grid-column: 1; grid-row: 3; }
+  .teaser-tile[data-pos="H"] { grid-column: 2; grid-row: 3; }
+  .teaser-tile[data-pos="E"] { grid-column: 1; grid-row: 4; }
+  .teaser-tile[data-pos="I"] { grid-column: 2; grid-row: 4; }
+  .teaser-tile[data-pos="F"] { grid-column: 1; grid-row: 5; }
+  .teaser-tile[data-pos="J"] { grid-column: 2; grid-row: 5; }
+  .teaser-col-lbl { display: none !important; }   /* row-tags label the columns instead */
+  .teaser-row-tag, .teaser-col-tag { font-size: 0.6rem; padding: 0.12rem 0.4rem; }
+  .teaser-tile { border-radius: 8px; }
+  .teaser-tile.has-arrow::after { display: none; }   /* no vertical arrow when side-by-side */
+  .teaser-tile:hover { transform: none; }            /* no sticky pop on touch; tap opens lightbox */
   .teaser-figure-head { padding: 0.5rem 0.85rem; font-size: 0.72rem; }
   .teaser-figure-hint { display: none; }
 
@@ -2102,9 +2115,11 @@ footer p { font-size: 1rem; }
   }
   .editor-toolbar .tool-btn { width: 34px; height: 34px; font-size: 0.7rem; }
   .editor-toolbar .tt { display: none; }
-  .editor-scene { display: flex !important; padding: 5px; margin: 6px 0; }
-  .editor-result { display: flex !important; padding: 5px; margin: 6px 0; }
-  .scene-frame, .result-frame { min-height: 0; aspect-ratio: 1/1; }
+  .editor-scene { display: flex !important; padding: 5px; margin: 6px 0; min-width: 0; }
+  .editor-result { display: flex !important; padding: 5px; margin: 6px 0; min-width: 0; }
+  /* min-width:0 lets the 1fr columns shrink; keep frames/images within their track */
+  .scene-frame, .result-frame { min-height: 0; min-width: 0; max-width: 100%; aspect-ratio: 1/1; }
+  .scene-frame img, .result-frame img, .result-img { max-width: 100%; height: auto; }
   .scene-label, .result-label {
     font-size: 0.58rem; padding: 0.1rem 0.35rem;
     top: 6px; left: 6px;
@@ -2132,17 +2147,28 @@ footer p { font-size: 1rem; }
   .editor-controls > span[style*="margin-left"] { display: none; }
   .face-legend { padding: 0.6rem 0.85rem; gap: 0.45rem; flex-wrap: wrap; font-size: 0.68rem; }
 
-  /* ── Teaser figure — keep the stacked layout from the 768 block,
-       just tighter padding/gaps for narrow phones.                     */
+  /* ── Teaser figure — keep the 2-column phone layout from the 768 block,
+       just a touch tighter for narrow phones.                          */
   .teaser-figure { margin-top: 1.5rem; }
-  .teaser-figure-body { gap: 0.35rem; padding: 0.4rem; }
-  .teaser-figure-body { column-gap: 0.2rem; row-gap: 0.25rem; }
-  .teaser-h-arrow { width: 16px; height: 16px; }
-  .teaser-h-arrow svg { width: 8px; height: 8px; }
-  .teaser-row-tag, .teaser-col-tag { font-size: 0.44rem; padding: 0.06rem 0.22rem; }
+  .teaser-figure-body { column-gap: 0.4rem; row-gap: 0.5rem; padding: 0.65rem; }
+  .teaser-row-tag, .teaser-col-tag { font-size: 0.56rem; padding: 0.1rem 0.35rem; }
 
   /* ── Qualitative gallery cards ──────────────────────────────────── */
-  .qg-row { grid-template-columns: 1fr; }
+    /* Each scene row carries an inline grid-template-columns:repeat(5,1fr),
+     which crams 5 tiles to ~55px on a phone.  Switch to a horizontally
+     swipeable strip (display:flex ignores the inline grid columns) so each
+     Source→edit thumbnail stays legible and the comparison order is kept. */
+  .qg-row {
+    display: flex !important;
+    overflow-x: auto;
+    gap: 0.5rem;
+    padding-bottom: 0.4rem;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+  }
+  .qg-row > .qg-grid-card { flex: 0 0 44%; scroll-snap-align: start; }
+  .qg-row::-webkit-scrollbar { height: 5px; }
+  .qg-row::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
   .qg-grid { grid-template-columns: repeat(2, 1fr); gap: 0.55rem; }
   .qg-grid-card img { object-fit: cover; }
   /* Title — single line with ellipsis so "Large 3D Transformations" etc.
@@ -2203,8 +2229,7 @@ footer p { font-size: 1rem; }
   .editor-toolbar .tool-btn { width: 42px; height: 38px; }
   .editor-controls { padding: 0.45rem 0.65rem; }
   .face-legend { padding: 0.5rem 0.65rem; font-size: 0.62rem; }
-  /* Teaser arrow disk fully hidden, columns share full width */
-  .teaser-figure-body { grid-template-columns: 1fr 0 3.6fr; column-gap: 0.3rem; padding: 0.4rem; }
+  /* Teaser keeps the 2-column (Boxes | Image) phone layout from the 768 block */
   .teaser-h-arrow { display: none; }
 }
 
@@ -2278,9 +2303,16 @@ footer p { font-size: 1rem; }
   </div>
 
 <!-- TEASER VIDEO -->
-<section class="section wide" id="overview-video" style="padding-top: 0.5; margin-top: 0; padding-bottom: 0; margin-bottom: 0;">
-  <div class="reveal" style="max-width:1080px;margin:0 auto; padding-top: 0; border-radius:14px;overflow:hidden;border:1px solid var(--border);box-shadow:0 24px 60px -28px rgba(40,30,20,.4);background:#000; display: flex; flex-direction: column;">
-    <video src="assets/thinking_in_boxes.mp4" playsinline controls preload="metadata" style="width:100%;display:block;"></video>
+<section class="section wide" id="overview-video" style="width:100%;padding-top: 0.5; margin-top: 0; padding-bottom: 0; margin-bottom: 0;">
+  <div class="reveal" style="width:100%;max-width:1080px;margin:0 auto; padding-top: 0; border-radius:14px;overflow:hidden;border:1px solid var(--border);box-shadow:0 24px 60px -28px rgba(40,30,20,.4);background:#000; display: flex; flex-direction: column;">
+    <div style="position:relative;width:100%;aspect-ratio:16/9;">
+      <iframe style="position:absolute;inset:0;width:100%;height:100%;border:0;display:block;"
+              src="https://www.youtube-nocookie.com/embed/EpDTHUuuq74?rel=0&playsinline=1"
+              title="Thinking in Boxes — overview"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowfullscreen referrerpolicy="strict-origin-when-cross-origin">
+      </iframe>
+    </div>
   </div>
 </section>
 
@@ -2473,7 +2505,7 @@ footer p { font-size: 1rem; }
         <strong>Synthetic data generation.</strong> Multi-object scenes are assembled by sampling assets from ObjaverseXL, HDRIs, and material libraries, then placed in Blender. We render paired RGB images and 3D-primitive box layouts for source/target edit configurations.
       </div>
     </div>
-    <div class="col-card zoomable" data-zoom="assets/web/img/training.jpg"></div>
+    <div class="col-card zoomable" data-zoom="assets/web/img/training.jpg">
       <div class="col-card-header">
         <span class="col-tag">Train</span>
         <span>Two-Stage Training Pipeline</span>
@@ -2694,18 +2726,17 @@ const observer = new IntersectionObserver((entries) => {
 document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
 
 // ── NAV ACTIVE STATE ──
-const sections = document.querySelectorAll('section[id]');
+const sections = [...document.querySelectorAll('section[id]')];
 const navLinks = document.querySelectorAll('.nav-links a');
-const navObserver = new IntersectionObserver((entries) => {
-  entries.forEach(e => {
-    if (e.isIntersecting) {
-      navLinks.forEach(a => {
-        a.classList.toggle('active', a.getAttribute('href') === '#' + e.target.id);
-      });
-    }
-  });
-}, { rootMargin: '-40% 0px -40% 0px' });
-sections.forEach(s => navObserver.observe(s));
+const markActive = (id) =>
+  navLinks.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + id));
+const docTop = (el) => { let y = 0; while (el) { y += el.offsetTop; el = el.offsetParent; } return y; };
+const currentSection = () => {
+  const line = window.scrollY + window.innerHeight * 0.3;
+  let cur = sections.length ? sections[0].id : null;
+  sections.forEach(s => { if (docTop(s) <= line) cur = s.id; });
+  return cur;
+};
 
 // ══════════════════════════════════════════════════════════════
 //  SIDE 3D BOX DECORATIONS
@@ -3386,10 +3417,8 @@ function renderGrid() {
     qgFigure.style.display = '';
     qgFigureImg.src = set.img;
     qgFigureCap.innerHTML = set.cap;
-    qgFigure.onclick = () => openLightbox({
-      label: 'Qualitative figure',
-      image: set.img, srcBox: set.img, tgtBox: set.img, gen: set.img,
-    });
+    qgFigure.onclick = () => openFigpop(set.img);
+    qgFigure.title = 'Click to enlarge';
   }
 }
 document.querySelectorAll('.qg-set-btn').forEach(b => {
